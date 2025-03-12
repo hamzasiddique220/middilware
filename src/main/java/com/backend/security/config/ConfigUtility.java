@@ -31,10 +31,11 @@ public class ConfigUtility {
         return new WebMvcConfigurer() {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
-                registry.addMapping(corsConfiguration)
-                        .allowedOrigins("*")
-                        .allowedHeaders("*")
-                        .allowedMethods(allowedMethods.split(","));
+                registry.addMapping("/**") // Apply to all paths
+                        .allowedOrigins("*") // Allow all origins
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS") // Allowed HTTP methods
+                        .allowedHeaders("*") // Allow all headers
+                        .allowCredentials(true); // Allow cookies/auth
             }
         };
     }
