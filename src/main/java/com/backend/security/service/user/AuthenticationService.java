@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -112,9 +113,9 @@ public class AuthenticationService extends AbstractService{
     try {
 
       List<User> listallUser = repository.findAll();
-      return response(MessageType.SUCCESS, HttpStatus.OK,
-          "message", "fetch all users successfully",
-          "users", listallUser);
+      return ResponseEntity.status(HttpStatus.OK)
+      .body(Map.of("success", true, "message",
+          "fetch all users successfully","userList",listallUser));
     } catch (Exception e) {
       e.printStackTrace();
       return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);

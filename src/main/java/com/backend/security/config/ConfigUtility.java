@@ -35,7 +35,7 @@ public class ConfigUtility {
                         .allowedOrigins("*") // Allow all origins
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS") // Allowed HTTP methods
                         .allowedHeaders("*") // Allow all headers
-                        .allowCredentials(true); // Allow cookies/auth
+                        .allowCredentials(false); // Allow cookies/auth
             }
         };
     }
