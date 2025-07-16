@@ -36,6 +36,7 @@ public Aws updateAwsCredential(Aws updatedAws) {
             updatedAws.getProviderId()
     ).ifPresent(existing -> {
         if (existing.getId() != updatedAws.getId()) {
+            System.out.println("error");
             throw new RuntimeException("AWS credential already exists with same accessKey, secretKey, region, and providerId");
         }
     });
