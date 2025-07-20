@@ -14,4 +14,7 @@ public interface AwsRepository extends JpaRepository<Aws, Integer> {
             String secretKey,
             String region,
             int providerId);
+
+    Aws findByUserId(String userId);
+
 }
