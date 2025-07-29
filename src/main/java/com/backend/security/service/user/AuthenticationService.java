@@ -1,13 +1,11 @@
 package com.backend.security.service.user;
 
 import com.backend.security.config.JwtService;
-import com.backend.security.config.Role;
 import com.backend.security.model.user.Token;
 import com.backend.security.model.user.User;
 import com.backend.security.repository.user.TokenRepository;
 import com.backend.security.repository.user.UserRepository;
 import com.backend.security.request.user.AuthenticationRequest;
-import com.backend.security.request.user.RegisterRequest;
 import com.backend.security.request.user.TokenType;
 import com.backend.security.response.user.AuthenticationResponse;
 import com.backend.security.service.AbstractService;
@@ -21,10 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -33,7 +28,7 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
-public class AuthenticationService extends AbstractService{
+public class AuthenticationService extends AbstractService {
   private final UserRepository repository;
   private final TokenRepository tokenRepository;
   private final PasswordEncoder passwordEncoder;
@@ -42,6 +37,10 @@ public class AuthenticationService extends AbstractService{
 
   public ResponseEntity<?> register(User request) {
     try {
+      if(request.getRole()==null){
+           return response(MessageType.SUCCESS, HttpStatus.CONFLICT,
+            "message", "Role can not be null");
+      }
       if (!repository.findByEmail(request.getEmail()).isEmpty())
         return response(MessageType.SUCCESS, HttpStatus.CONFLICT,
             "message", "user already exits");
@@ -51,9 +50,9 @@ public class AuthenticationService extends AbstractService{
           .email(request.getEmail())
           .password(passwordEncoder.encode(request.getPassword()))
           .role(request.getRole())
-          .organization(null)
-          .dob(null).address(null).gender(null).phone(null).enabled(null).cardDetail(null).country(null).state(null)
-          .city(null)
+          .organization(request.getOrganization())
+          .dob(request.getDob()).address(request.getAddress()).gender(request.getGender()).phone(request.getPhone()).enabled(true).cardDetail(request.getCardDetail()).country(request.getCountry()).state(request.getState())
+          .city(request.getCity())
           .build();
       var savedUser = repository.save(user);
       var jwtToken = jwtService.generateToken(user);
@@ -72,9 +71,7 @@ public class AuthenticationService extends AbstractService{
     authenticationManager.authenticate(
         new UsernamePasswordAuthenticationToken(
             request.getEmail(),
-            request.getPassword()
-        )
-    );
+            request.getPassword()));
     var user = repository.findByEmail(request.getEmail())
         .orElseThrow();
     var jwtToken = jwtService.generateToken(user);
@@ -83,7 +80,7 @@ public class AuthenticationService extends AbstractService{
     saveUserToken(user, jwtToken);
     return AuthenticationResponse.builder()
         .accessToken(jwtToken)
-            .refreshToken(refreshToken)
+        .refreshToken(refreshToken)
         .build();
   }
 
@@ -112,10 +109,10 @@ public class AuthenticationService extends AbstractService{
   public ResponseEntity<?> getAllUsers() {
     try {
 
-      List<User> listallUser = repository.findAll();
+      List<User> listallUser = repository.findAllByEnabledTrue();
       return ResponseEntity.status(HttpStatus.OK)
-      .body(Map.of("success", true, "message",
-          "fetch all users successfully","userList",listallUser));
+          .body(Map.of("success", true, "message",
+              "fetch all users successfully", "userList", listallUser));
     } catch (Exception e) {
       e.printStackTrace();
       return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
@@ -136,31 +133,62 @@ public class AuthenticationService extends AbstractService{
     }
 
   }
+
   public void refreshToken(
-          HttpServletRequest request,
-          HttpServletResponse response
-  ) throws IOException {
+      HttpServletRequest request,
+      HttpServletResponse response) throws IOException {
     final String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
     final String refreshToken;
     final String userEmail;
-    if (authHeader == null ||!authHeader.startsWith("Bearer ")) {
+    if (authHeader == null || !authHeader.startsWith("Bearer ")) {
       return;
     }
     refreshToken = authHeader.substring(7);
     userEmail = jwtService.extractUsername(refreshToken);
     if (userEmail != null) {
       var user = this.repository.findByEmail(userEmail)
-              .orElseThrow();
+          .orElseThrow();
       if (jwtService.isTokenValid(refreshToken, user)) {
         var accessToken = jwtService.generateToken(user);
         revokeAllUserTokens(user);
         saveUserToken(user, accessToken);
         var authResponse = AuthenticationResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .build();
+            .accessToken(accessToken)
+            .refreshToken(refreshToken)
+            .build();
         new ObjectMapper().writeValue(response.getOutputStream(), authResponse);
       }
     }
   }
+
+  public User updateUser(String id, User updatedUser) {
+    return repository.findById(id)
+        .map(user -> {
+          user.setFirstName(updatedUser.getFirstName());
+          user.setLastName(updatedUser.getLastName());
+          user.setOrganization(updatedUser.getOrganization());
+          user.setDob(updatedUser.getDob());
+          user.setGender(updatedUser.getGender());
+          user.setPhone(updatedUser.getPhone());
+          user.setCardToken(updatedUser.getCardToken());
+          user.setCardDetail(updatedUser.getCardDetail());
+          user.setCountry(updatedUser.getCountry());
+          user.setState(updatedUser.getState());
+          user.setCity(updatedUser.getCity());
+          user.setAddress(updatedUser.getAddress());
+          // Optionally, update other fields if needed
+          return repository.save(user);
+        }).orElseThrow(() -> new RuntimeException("User not found with id " + id));
+  }
+
+  public void deleteUser(String id) {
+    repository.findById(id)
+        .map(user -> {
+          user.setEnabled(false);
+          // Optionally, update other fields if needed
+          return repository.save(user);
+        })
+        .orElseThrow(() -> new RuntimeException("User not found with id " + id));
+  }
+
 }
