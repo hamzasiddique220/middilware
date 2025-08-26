@@ -2,14 +2,17 @@ package com.backend.security.config;
 
 import com.backend.security.model.aws.Aws;
 import com.backend.security.repository.aws.AwsRepository;
+import com.backend.security.service.user.ResponseService;
 
 import lombok.RequiredArgsConstructor;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 
 @RequiredArgsConstructor
-public abstract class AbstractCloudConfig {
+public abstract class AbstractCloudConfig extends ResponseService {
 
+
+    
     protected final AWSConfig awsConfig;
     protected final AwsRepository awsRepository;
 
