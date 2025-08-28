@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 
 import com.backend.security.util.MessageType;
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 
 import lombok.extern.slf4j.Slf4j;
 
