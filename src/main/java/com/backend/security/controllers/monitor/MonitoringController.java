@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/monitor")
+@RequestMapping("/api/v1/monitor")
 public class MonitoringController {
 
     private final MonitoringClient monitoringClient;
@@ -38,9 +38,10 @@ public class MonitoringController {
                 .map(ResponseEntity::ok);
     }
 
-    @GetMapping("/instances")
-    public List<Map<String, Object>> getInstanceMetrics() {
-        return monitoringClient.getAllInstanceStats();
+    @GetMapping("/instances/spec")
+    public Map<String, Object> getInstanceMetrics(@RequestParam(defaultValue = "10") int day,@RequestParam(defaultValue = "day") String duration,@RequestParam(defaultValue = "null") String instanceId) {
+        User user = (User) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        return monitoringClient.getAllInstanceStats(user.getId(),instanceId,day,duration);
     }
 
     // @GetMapping("/volume")

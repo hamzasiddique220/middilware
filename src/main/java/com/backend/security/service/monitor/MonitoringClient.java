@@ -12,10 +12,13 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import software.amazon.awssdk.services.cloudwatch.model.*;
@@ -90,37 +93,95 @@ public class MonitoringClient extends AbstractCloudConfig {
         return Mono.just(Collections.emptyList());
     }
 
-    public List<Map<String, Object>> getAllInstanceStats() {
-        List<Map<String, Object>> result = new ArrayList<>();
+    public static int convertToPeriodInSeconds(String type) {
+        if (type.equalsIgnoreCase("day")) {
+            return 1 * 24 * 60 * 60; // 1 day → 86400 seconds
+        } else {
+            return 1 * 60 * 60; // 1 hour → 3600 seconds
+        }
+    }
 
-        DescribeInstancesResponse response = amazonEC2.describeInstances();
-        for (Reservation reservation : response.reservations()) {
-            for (Instance instance : reservation.instances()) {
-                if (!instance.state().name().equals(InstanceStateName.RUNNING))
-                    continue;
+    public Map<String, Object> getAllInstanceStats(String userId, String instanceId, int day,String duration) {
+        AwsEc2Client(userId);
+        AwsCloudWatchclient(userId);
+        int time = convertToPeriodInSeconds(duration);
+        Map<String, Object> instanceData = new HashMap<>();
+        instanceData.put("instanceId", instanceId);
+        instanceData.put("cpuDaysAverage", getVpcMetric(instanceId, time,"CPUUtilization",day));
+        instanceData.put("memDaysAverage", getVpcMetric(instanceId, time,"mem_used_percent",day));
+        instanceData.put("storageDaysAverage", getVpcMetric(instanceId, time,"disk_used_percent",day));
+        return instanceData;
+    }
 
-                String instanceId = instance.instanceId();
-                String name = instance.tags().stream()
-                        .filter(t -> t.key().equals("Name"))
-                        .map(Tag::value)
-                        .findFirst()
-                        .orElse("N/A");
+     public List<Map<String, Object>> getVpcMetric(String instanceId,int time,String metricName,int day) {
 
-                Map<String, Object> instanceData = new HashMap<>();
-                instanceData.put("instanceId", instanceId);
-                instanceData.put("name", name);
-                instanceData.put("cpu7DayAverage",
-                        getAverageMetric(instanceId, "CPUUtilization", "AWS/EC2", "Percent", 7));
-                instanceData.put("memory7DayAverage",
-                        getAverageMetric(instanceId, "mem_used_percent", "CWAgent", "Percent", 7));
-                instanceData.put("disk7DayAverage",
-                        getAverageMetric(instanceId, "disk_used_percent", "CWAgent", "Percent", 7));
+        int totalVcpus = getInstanceVcpus(instanceId);
 
-                result.add(instanceData);
+        MetricDataQuery q = MetricDataQuery.builder()
+            .id("cpu")
+            .metricStat(MetricStat.builder()
+                .period(time)
+                .stat("Average")
+                .metric(Metric.builder()
+                    .namespace("AWS/EC2")
+                    .metricName(metricName)
+                    .dimensions(Dimension.builder()
+                        .name("InstanceId")
+                        .value(instanceId)
+                        .build())
+                    .build())
+                .build())
+            .returnData(true)
+            .build();
+
+        Instant endDate = Instant.now();
+        Instant startDate = endDate.minusSeconds(86400L * day);
+
+        GetMetricDataResponse resp = cloudWatchClient.getMetricData(GetMetricDataRequest.builder()
+            .startTime(startDate)
+            .endTime(endDate)
+            .metricDataQueries(q)
+            .scanBy(ScanBy.TIMESTAMP_ASCENDING)
+            .build());
+
+        List<Map<String, Object>> results = new ArrayList<>();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                .withZone(ZoneId.systemDefault());
+
+        for (MetricDataResult r : resp.metricDataResults()) {
+            List<Instant> timestamps = r.timestamps();
+            List<Double> values = r.values();
+
+            for (int i = 0; i < values.size(); i++) {
+                double utilization = values.get(i); // CPU utilization in %
+                double usedVcpus = (utilization / 100.0) * totalVcpus;
+
+                Map<String, Object> data = new LinkedHashMap<>();
+                data.put("date", formatter.format(timestamps.get(i)));
+                data.put("cpuUtilization", utilization);
+                data.put("usedVcpus", Math.round(usedVcpus * 100.0) / 100.0); // round to 2 decimals
+                results.add(data);
             }
         }
+        log.info("CPU daily averages (last 10 days) for {} -> {}", instanceId, results);
 
-        return result;
+        return results;
+    }
+
+        private int getInstanceVcpus(String instanceId) {
+        DescribeInstancesResponse response = amazonEC2.describeInstances(
+            DescribeInstancesRequest.builder().instanceIds(instanceId).build()
+        );
+
+        // Get instance type (e.g., t3.medium, m5.large, etc.)
+        String instanceType = response.reservations().get(0).instances().get(0).instanceTypeAsString();
+
+        // Fetch instance type details to get vCPUs
+        DescribeInstanceTypesResponse typeResponse = amazonEC2.describeInstanceTypes(
+            DescribeInstanceTypesRequest.builder().instanceTypesWithStrings(instanceType).build()
+        );
+
+        return typeResponse.instanceTypes().get(0).vCpuInfo().defaultVCpus();
     }
 
     private double getAverageMetric(String instanceId, String metricName, String namespace, String unit, int days) {
