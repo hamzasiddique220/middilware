@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import com.backend.security.config.AWSConfig;
 import com.backend.security.config.AbstractCloudConfig;
+import com.backend.security.dto.aws.InstanceMetricsResponse;
 import com.backend.security.repository.aws.AwsRepository;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
@@ -101,48 +102,68 @@ public class MonitoringClient extends AbstractCloudConfig {
         }
     }
 
-    public Map<String, Object> getAllInstanceStats(String userId, String instanceId, int day,String duration) {
+    public InstanceMetricsResponse getInstanceMetric(String userId, String instanceId, int day,String duration) {
         AwsEc2Client(userId);
         AwsCloudWatchclient(userId);
         int time = convertToPeriodInSeconds(duration);
-        Map<String, Object> instanceData = new HashMap<>();
-        instanceData.put("instanceId", instanceId);
-        instanceData.put("cpuDaysAverage", getVpcMetric(instanceId, time,"CPUUtilization",day));
-        instanceData.put("memDaysAverage", getVpcMetric(instanceId, time,"mem_used_percent",day));
-        instanceData.put("storageDaysAverage", getVpcMetric(instanceId, time,"disk_used_percent",day));
-        return instanceData;
+        int totalVcpus = getInstanceVcpus(instanceId);
+        List<Map<String, Object>> cpuData =getMetricData(instanceId, time,"CPUUtilization","AWS/EC2",day,totalVcpus);
+         List<Map<String, Object>> memoryData =  getMetricData(instanceId, time,"mem_used_percent","CWAgent",day,null);
+        List<Map<String, Object>> diskData = getMetricData(instanceId, time,"disk_used_percent","CWAgent",day,null);
+                // Calculate average values
+        double avgCpu = cpuData.stream().mapToDouble(d -> (Double) d.get("value")).average().orElse(0.0);
+        double avgMemory = memoryData.stream().mapToDouble(d -> (Double) d.get("value")).average().orElse(0.0);
+        double avgDisk = diskData.stream().mapToDouble(d -> (Double) d.get("value")).average().orElse(0.0);
+                String suggestion;
+        if (avgCpu < 30 && avgMemory < 40 && avgDisk < 60) {
+            suggestion = "✅ Safe to downsize instance — low resource usage.";
+        } else if (avgCpu > 80 || avgMemory > 85 || avgDisk > 85) {
+            suggestion = "⚠️ High resource usage — consider upgrading instance.";
+        } else {
+            suggestion = "ℹ️ Current instance size is optimal — no change needed.";
+        }
+        return InstanceMetricsResponse.builder()
+                .instanceId(instanceId)
+                .cpuData(cpuData)
+                .memoryData(memoryData)
+                .diskData(diskData)
+                .avgCpu(avgCpu)
+                .avgMemory(avgMemory)
+                .avgDisk(avgDisk)
+                .suggestion(suggestion)
+                .build();
+
     }
 
-     public List<Map<String, Object>> getVpcMetric(String instanceId,int time,String metricName,int day) {
-
-        int totalVcpus = getInstanceVcpus(instanceId);
+  public List<Map<String, Object>> getMetricData(String instanceId, int time, String metricName,
+                                                  String namespace, int day, Integer totalVcpus) {
 
         MetricDataQuery q = MetricDataQuery.builder()
-            .id("cpu")
-            .metricStat(MetricStat.builder()
-                .period(time)
-                .stat("Average")
-                .metric(Metric.builder()
-                    .namespace("AWS/EC2")
-                    .metricName(metricName)
-                    .dimensions(Dimension.builder()
-                        .name("InstanceId")
-                        .value(instanceId)
+                .id("metric")
+                .metricStat(MetricStat.builder()
+                        .period(time) // e.g., 86400 for daily average
+                        .stat("Average")
+                        .metric(Metric.builder()
+                                .namespace(namespace)
+                                .metricName(metricName)
+                                .dimensions(Dimension.builder()
+                                        .name("InstanceId")
+                                        .value(instanceId)
+                                        .build())
+                                .build())
                         .build())
-                    .build())
-                .build())
-            .returnData(true)
-            .build();
+                .returnData(true)
+                .build();
 
         Instant endDate = Instant.now();
         Instant startDate = endDate.minusSeconds(86400L * day);
 
         GetMetricDataResponse resp = cloudWatchClient.getMetricData(GetMetricDataRequest.builder()
-            .startTime(startDate)
-            .endTime(endDate)
-            .metricDataQueries(q)
-            .scanBy(ScanBy.TIMESTAMP_ASCENDING)
-            .build());
+                .startTime(startDate)
+                .endTime(endDate)
+                .metricDataQueries(q)
+                .scanBy(ScanBy.TIMESTAMP_ASCENDING)
+                .build());
 
         List<Map<String, Object>> results = new ArrayList<>();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
@@ -153,18 +174,21 @@ public class MonitoringClient extends AbstractCloudConfig {
             List<Double> values = r.values();
 
             for (int i = 0; i < values.size(); i++) {
-                double utilization = values.get(i); // CPU utilization in %
-                double usedVcpus = (utilization / 100.0) * totalVcpus;
-
                 Map<String, Object> data = new LinkedHashMap<>();
                 data.put("date", formatter.format(timestamps.get(i)));
-                data.put("cpuUtilization", utilization);
-                data.put("usedVcpus", Math.round(usedVcpus * 100.0) / 100.0); // round to 2 decimals
+                data.put("value", Math.round(values.get(i) * 100.0) / 100.0);
+
+                // If CPU metric, calculate used vCPUs
+                if ("CPUUtilization".equals(metricName) && totalVcpus != null) {
+                    double usedVcpus = (values.get(i) / 100.0) * totalVcpus;
+                    data.put("usedVcpus", Math.round(usedVcpus * 100.0) / 100.0);
+                }
+
                 results.add(data);
             }
         }
-        log.info("CPU daily averages (last 10 days) for {} -> {}", instanceId, results);
 
+        log.info("Metric [{}] daily averages for instance {} (last {} days) -> {}", metricName, instanceId, day, results);
         return results;
     }
 
@@ -357,5 +381,51 @@ public class MonitoringClient extends AbstractCloudConfig {
                 System.out.println("------");
             }
         }
+    }
+
+     public Double getAverageCPUUtilization(String instanceId) {
+        Instant endTime = Instant.now();
+        Instant startTime = endTime.minusSeconds(10 * 24 * 60 * 60); // last 10 days
+
+        GetMetricStatisticsRequest request = GetMetricStatisticsRequest.builder()
+                .namespace("AWS/EC2")
+                .metricName("CPUUtilization")
+                .dimensions(Dimension.builder().name("InstanceId").value(instanceId).build())
+                .startTime(startTime)
+                .endTime(endTime)
+                .period(3600) // 1-hour period
+                .statistics(Statistic.AVERAGE)
+                .build();
+
+        GetMetricStatisticsResponse response = cloudWatchClient.getMetricStatistics(request);
+        List<Datapoint> datapoints = response.datapoints();
+
+        return datapoints.stream()
+                .mapToDouble(Datapoint::average)
+                .average()
+                .orElse(0.0);
+    }
+
+    public Double getAverageMemoryUtilization(String instanceId) {
+        Instant endTime = Instant.now();
+        Instant startTime = endTime.minusSeconds(10 * 24 * 60 * 60);
+
+        GetMetricStatisticsRequest request = GetMetricStatisticsRequest.builder()
+                .namespace("CWAgent")  // Memory metrics come from CloudWatch Agent
+                .metricName("mem_used_percent")
+                .dimensions(Dimension.builder().name("InstanceId").value(instanceId).build())
+                .startTime(startTime)
+                .endTime(endTime)
+                .period(3600)
+                .statistics(Statistic.AVERAGE)
+                .build();
+
+        GetMetricStatisticsResponse response = cloudWatchClient.getMetricStatistics(request);
+        List<Datapoint> datapoints = response.datapoints();
+
+        return datapoints.stream()
+                .mapToDouble(Datapoint::average)
+                .average()
+                .orElse(0.0);
     }
 }
