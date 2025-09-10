@@ -1,6 +1,8 @@
 package com.backend.security.config;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ssm.SsmClient;
+
 import com.backend.security.model.aws.Aws;
 import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -72,6 +74,13 @@ public class AWSConfig {
         AwsBasicCredentials awsCredentials = AwsBasicCredentials.create(aws.getAccessKey(), aws.getSecretKey());
         return CloudWatchClient.builder()
                 .region(Region.of(aws.getRegion()))
+                .credentialsProvider(StaticCredentialsProvider.create(awsCredentials))
+                .build();
+    }
+
+    public SsmClient getSsmClient(Aws aws) {
+        AwsBasicCredentials awsCredentials = AwsBasicCredentials.create(aws.getAccessKey(), aws.getSecretKey());
+        return SsmClient.builder().region(Region.of(aws.getRegion()))
                 .credentialsProvider(StaticCredentialsProvider.create(awsCredentials))
                 .build();
     }

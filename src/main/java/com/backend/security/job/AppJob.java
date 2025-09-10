@@ -5,8 +5,7 @@ import java.time.LocalDateTime;
 import java.util.Date;
 
 import org.jobrunr.jobs.annotations.Job;
-import org.jobrunr.spring.annotations.Recurring;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.jobrunr.jobs.annotations.Recurring;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import com.backend.security.service.operation.OperationExecuterService;

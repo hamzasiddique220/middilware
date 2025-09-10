@@ -19,7 +19,7 @@ public class AwsAIAgentService extends AbstractCloudConfig {
         super(awsConfig, awsRepository);
     }
 
-    public String createVm(int cpu, int ram) {
+    public String createVm(int cpu, int ram,String userId) {
         DescribeVpcsRequest vpcRequest = DescribeVpcsRequest.builder()
                 .filters(Filter.builder()
                         .name("isDefault")
@@ -146,7 +146,8 @@ public class AwsAIAgentService extends AbstractCloudConfig {
         return response.subnets().get(0).subnetId();
     }
 
-    public String attachVolume(String instanceId, String volumeId) {
+    public String attachVolume(String instanceId, String volumeId,String userId) {
+        AwsEc2Client(userId);
         AttachVolumeRequest request = AttachVolumeRequest.builder()
                 .volumeId(volumeId)
                 .instanceId(instanceId)
@@ -156,7 +157,8 @@ public class AwsAIAgentService extends AbstractCloudConfig {
         return "Volume attached successfully!";
     }
 
-    public String startVm(String instanceId) {
+    public String startVm(String instanceId,String userId) {
+        AwsEc2Client(userId);
         StartInstancesRequest request = StartInstancesRequest.builder()
                 .instanceIds(instanceId)
                 .build();
@@ -164,7 +166,8 @@ public class AwsAIAgentService extends AbstractCloudConfig {
         return "VM started successfully!";
     }
 
-    public String stopVm(String instanceId) {
+    public String stopVm(String instanceId,String userId) {
+        AwsEc2Client(userId);
         StopInstancesRequest request = StopInstancesRequest.builder()
                 .instanceIds(instanceId)
                 .build();
@@ -172,7 +175,8 @@ public class AwsAIAgentService extends AbstractCloudConfig {
         return "VM stopped successfully!";
     }
 
-    public String deleteVm(String instanceId) {
+    public String deleteVm(String instanceId,String userId) {
+        AwsEc2Client(userId);
         TerminateInstancesRequest request = TerminateInstancesRequest.builder()
                 .instanceIds(instanceId)
                 .build();
@@ -180,7 +184,8 @@ public class AwsAIAgentService extends AbstractCloudConfig {
         return "VM deleted successfully!";
     }
 
-    public ResponseEntity<?> listVm() {
+    public ResponseEntity<?> listVm(String userId) {
+        AwsEc2Client(userId);
         DescribeInstancesRequest request = DescribeInstancesRequest.builder().build();
         DescribeInstancesResponse response = amazonEC2.describeInstances(request);
 

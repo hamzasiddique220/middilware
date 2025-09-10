@@ -7,17 +7,17 @@ import com.backend.security.service.user.ResponseService;
 import lombok.RequiredArgsConstructor;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ssm.SsmClient;
 
 @RequiredArgsConstructor
 public abstract class AbstractCloudConfig extends ResponseService {
 
-
-    
     protected final AWSConfig awsConfig;
     protected final AwsRepository awsRepository;
 
     protected Ec2Client amazonEC2;
     protected CloudWatchClient cloudWatchClient;
+    protected SsmClient ssmClient;
 
     public void AwsEc2Client(String userId) {
         Aws aws = awsRepository.findByUserId(userId);
@@ -27,5 +27,10 @@ public abstract class AbstractCloudConfig extends ResponseService {
     public void AwsCloudWatchclient(String userId) {
         Aws aws = awsRepository.findByUserId(userId);
         cloudWatchClient = awsConfig.getCloudWatchClient(aws);
+    }
+
+    public void AwsSsmClientclient(String userId) {
+        Aws aws = awsRepository.findByUserId(userId);
+        ssmClient = awsConfig.getSsmClient(aws);
     }
 }

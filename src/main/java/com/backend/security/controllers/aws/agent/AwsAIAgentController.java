@@ -1,9 +1,11 @@
 package com.backend.security.controllers.aws.agent;
 import com.backend.security.exception.BadRequestException;
+import com.backend.security.model.user.User;
 import com.backend.security.service.aws.agent.AwsAIAgentService;
 import com.backend.security.service.aws.agent.IntentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
@@ -17,6 +19,7 @@ public class AwsAIAgentController {
 
     @PostMapping("/execute")
     public ResponseEntity<?> execute(@RequestBody Map<String, String> payload) {
+        User user= (User) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         String prompt = payload.get("prompt");
         Map<String, String> intent = intentService.extractIntent(prompt);
 
@@ -28,33 +31,33 @@ public class AwsAIAgentController {
             case "create_vm" -> {
                 int cpu = Integer.parseInt(intent.getOrDefault("cpu", "2"));
                 int ram = Integer.parseInt(intent.getOrDefault("ram", "4"));
-                String vmId = awsAIAgentService.createVm(cpu, ram);
+                String vmId = awsAIAgentService.createVm(cpu, ram,user.getId());
                 return ResponseEntity.ok(Map.of("status", "VM Created", "vmId", vmId, "cpu", String.valueOf(cpu),
                         "ramGB", String.valueOf(ram)));
             }
             case "attach_volume" -> {
                 require(instanceId, "instanceId (e.g., i-xxxxxxxxxxxxxxxxx) is required");
                 require(volumeId, "volumeId (e.g., vol-xxxxxxxxxxxxxxxxx) is required");
-                String result = awsAIAgentService.attachVolume(instanceId, volumeId);
+                String result = awsAIAgentService.attachVolume(instanceId, volumeId,user.getId());
                 return ResponseEntity.ok(Map.of("status", result));
             }
             case "start_vm" -> {
                 require(instanceId, "instanceId is required");
-                String result = awsAIAgentService.startVm(instanceId);
+                String result = awsAIAgentService.startVm(instanceId,user.getId());
                 return ResponseEntity.ok(Map.of("status", result));
             }
             case "stop_vm" -> {
                 require(instanceId, "instanceId is required");
-                String result = awsAIAgentService.stopVm(instanceId);
+                String result = awsAIAgentService.stopVm(instanceId,user.getId());
                 return ResponseEntity.ok(Map.of("status", result));
             }
             case "delete_vm" -> {
                 require(instanceId, "instanceId is required");
-                String result = awsAIAgentService.deleteVm(instanceId);
+                String result = awsAIAgentService.deleteVm(instanceId,user.getId());
                 return ResponseEntity.ok(Map.of("status", result));
             }
             case "list_vm" -> {
-                return awsAIAgentService.listVm();
+                return awsAIAgentService.listVm(user.getId());
             }
             default -> {
                 throw new BadRequestException(

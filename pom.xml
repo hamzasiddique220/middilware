@@ -146,24 +146,31 @@
 		</dependency>
 		<dependency>
 			<groupId>org.jobrunr</groupId>
-			<artifactId>jobrunr-spring-boot-starter</artifactId>
-			<version>5.3.3</version>
-		</dependency>
-		<dependency>
-			<groupId>org.jobrunr</groupId>
-			<artifactId>jobrunr</artifactId>
+			<artifactId>jobrunr-spring-boot-3-starter</artifactId>
 			<version>7.3.2</version>
 		</dependency>
-		<dependency>
+
+
+		<!-- <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>ec2</artifactId>
             <version>2.25.12</version>
+        </dependency> -->
+			<dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ec2</artifactId>
+            <version>2.20.150</version>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>cloudwatch</artifactId>
             <version>2.25.12</version>
         </dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>ssm</artifactId>
+			<version>2.29.18</version>
+		</dependency>
 		<dependency>
 			<groupId>com.zaxxer</groupId>
 			<artifactId>HikariCP</artifactId>
